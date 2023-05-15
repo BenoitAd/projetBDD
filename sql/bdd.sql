@@ -51,6 +51,3 @@ BEGIN
     SELECT isbnn INTO exemplaire_isbn FROM exemplaire WHERE numeroInventaire = :new.numeroInventaire;
     INSERT INTO Tracking(nom, prenom, isbn) values(adherent_nom, adherent_prenom, exemplaire_isbn);
 END;
-
-
-select * from exemplaire;
