@@ -1,10 +1,23 @@
+import BD.ErreurSQL;
+import BD.SessionOracle;
+import oracle.jdbc.OracleTypes;
+import oracle.xdb.XMLType;
+
 import java.io.*;
 import java.net.*;
+import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TrackingClient {
 
 	private String host;
 	private int port;
+
+	private SessionOracle sessionOracle = new SessionOracle("i10a10a", "i10a10a");
 
 	public TrackingClient( String host, int port ) {
 		this.host = host;
@@ -38,7 +51,7 @@ public class TrackingClient {
 		}
 	}
 
-	public void run() {
+	public void run() throws SQLException {
 		String data = this.makeData();
 		boolean success = this.sendData(data);
 		if ( success ) {
@@ -48,7 +61,7 @@ public class TrackingClient {
 		}
 	}
 
-	static public void main( String[] args ) throws IOException {
+	static public void main( String[] args ) throws IOException, SQLException {
 		String host = "localhost";
 		int port = 9876;
 		if ( args.length >= 1 ) {
@@ -65,21 +78,81 @@ public class TrackingClient {
 	 * MODIFIER ICI
 	 * (vous pouvez ajouter des attributs)
 	 */
-
 	public void validateData() {
+
+		List<String> listIsbn = new ArrayList<String>();
+		try {
+			Statement statement = this.sessionOracle.getConnection().createStatement();
+			ResultSet result = statement.executeQuery("SELECT * FROM tracking WHERE FLAG = 1");
+			while (result.next()) {
+				listIsbn.add(result.getString("isbn"));
+			}
+		}
+		catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
+
+		for (String isbn : listIsbn) {
+			try {
+				CallableStatement cs = this.sessionOracle.getConnection().prepareCall("{call tracker.set_flag_2(?)");
+				cs.setString(1, isbn);
+				cs.execute();
+			}
+			catch (SQLException e) {
+				System.out.println(new ErreurSQL(e.getErrorCode(), e.getMessage()));
+			}
+		}
 		System.out.println("submission ok.");
 		/* Soumission OK */
 	}
-	public void invalidateData() {
+	public void invalidateData() throws SQLException {
 		System.out.println("submission ko.");
 		/* Echec de la soumission */
+		List<String> listIsbn = new ArrayList<String>();
+		try {
+			Statement statement = this.sessionOracle.getConnection().createStatement();
+			ResultSet result = statement.executeQuery("SELECT * FROM tracking WHERE FLAG = 1");
+			while (result.next()) {
+				listIsbn.add(result.getString("isbn"));
+			}
+		}
+		catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
+
+		for (String isbn : listIsbn) {
+			try {
+				CallableStatement cs = this.sessionOracle.getConnection().prepareCall("{call tracker.set_flag_0(?)");
+				cs.setString(1, isbn);
+				cs.execute();
+			}
+			catch (SQLException e) {
+				System.out.println(new ErreurSQL(e.getErrorCode(), e.getMessage()));
+			}
+		}
+
 	}
 
 	public String makeData() {
 		String data = "";
+		try {
+			CallableStatement cs = sessionOracle.getConnection().prepareCall("{call tracker.tracking_xml(?)}");
 
+			cs.registerOutParameter(1, OracleTypes.CURSOR);
+			cs.execute();
+			ResultSet rs = (ResultSet) cs.getObject(1);
+			while (rs.next()) {
+				XMLType xml = (XMLType) rs.getObject(1);
+				data += xml.getStringVal();
+			}
+			System.out.println("Data : " + data);
+		}
+		catch (SQLException e) {
+			System.out.println(new ErreurSQL(e.getErrorCode(), e.getMessage()));
+		}
 		/* Construction du contenu XML (utilisation de JDBC)*/
 		return data;
+
 	}
 
 
